@@ -65,12 +65,28 @@ async def kdbx_describe_tables_impl() -> List[TextContent]:
         conn = get_kdb_connection()
 
         available_tables = conn.tables(None).py()
-        
+
         # Filter out internal AI library index tables (*document, *stats, *token)
         available_tables = [
-            table for table in available_tables 
+            table for table in available_tables
             if not (table.endswith('document') or table.endswith('stats') or table.endswith('token'))
         ]
+
+        # TODO(Layer 2 - resource-list entitlement filter):
+        # Once the decision adapter exists, filter `available_tables` here
+        # by per-table read authorization for the calling principal:
+        #
+        #     token = get_access_token()
+        #     subject = principal_from(token)
+        #     available_tables = [
+        #         t for t in available_tables
+        #         if await adapter.decide(subject, "resource_read", f"kdbx://tables/{t}").allowed
+        #     ]
+        #
+        # The audit shape is one row per filter decision: subject + agent +
+        # "resource_list" + table_name + decision. Out of scope for Layer 1
+        # but the seam is here — see auth_strategy.md "Deployment shapes"
+        # and mcp_server_review.md §4.
 
         if not available_tables:
             return [TextContent(
@@ -110,6 +126,22 @@ def register_resources(mcp_server):
         Returns:
             List[TextContent]: Complete database analysis with all tables
         """
+        # Spike Layer 1: surface the validated token inside the resource
+        # handler. Demonstrates the SDK auth path reaches resource code via
+        # the same contextvars used by tool handlers — same import, same call.
+        # The Layer 2 entitlement-filter seam lives inside
+        # kdbx_describe_tables_impl(); see the TODO there.
+        try:
+            from mcp.server.auth.middleware.auth_context import get_access_token
+            tok = get_access_token()
+            if tok is not None:
+                logger.info(
+                    f"SPIKE: resource 'kdbx://tables' read by client_id={tok.client_id!r} "
+                    f"scopes={tok.scopes!r} resource={tok.resource!r}"
+                )
+        except Exception as e:
+            logger.debug(f"SPIKE: get_access_token unavailable: {e}")
+
         return await kdbx_describe_tables_impl()
 
     return ['kdbx://tables']

@@ -94,5 +94,27 @@ def register_prompts(mcp_server):
         Conduct detailed analysis of a specific table.
         Analysis_type Options: statistical, data_quality.
         """
+        # Spike Layer 1: surface the validated token inside the prompt
+        # handler. Same get_access_token() call as tools and resources;
+        # confirms the SDK auth path is uniform across all three MCP
+        # primitives.
+        #
+        # TODO(Layer 2 - per-prompt entitlement check):
+        # Once the decision adapter exists, gate the prompt fetch on
+        # `decide(subject, "prompt_get", "kdbx_table_analysis")`. Prompt
+        # access maps to the same Subject/Action/Resource shape as tools
+        # and resources; no new vocabulary needed.
+        try:
+            from mcp.server.auth.middleware.auth_context import get_access_token
+            tok = get_access_token()
+            if tok is not None:
+                logger.info(
+                    f"SPIKE: prompt 'kdbx_table_analysis' fetched by "
+                    f"client_id={tok.client_id!r} scopes={tok.scopes!r} "
+                    f"args=(table_name={table_name!r}, analysis_type={analysis_type!r})"
+                )
+        except Exception as e:
+            logger.debug(f"SPIKE: get_access_token unavailable: {e}")
+
         return await table_deep_dive_prompt_impl(table_name, analysis_type, sample_size)
     return ['kdbx_table_analysis']
