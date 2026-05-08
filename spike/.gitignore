@@ -1,0 +1,3 @@
+# Spike-only artifacts; not for production
+keys/
+*.pem

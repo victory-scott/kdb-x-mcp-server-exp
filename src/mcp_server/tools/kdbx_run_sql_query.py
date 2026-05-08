@@ -77,6 +77,19 @@ def register_tools(mcp_server):
         Returns:
             Dict[str, Any]: Query execution results.
         """
+        # Spike: surface the validated token inside the tool. Demonstrates the
+        # SDK auth path reaches application code via contextvars.
+        try:
+            from mcp.server.auth.middleware.auth_context import get_access_token
+            tok = get_access_token()
+            if tok is not None:
+                logger.info(
+                    f"SPIKE: tool called by client_id={tok.client_id!r} "
+                    f"scopes={tok.scopes!r} resource={tok.resource!r}"
+                )
+        except Exception as e:
+            logger.debug(f"SPIKE: get_access_token unavailable: {e}")
+
         return await run_query_impl(sqlSelectQuery=query)
 
     return ['kdbx_run_sql_query']

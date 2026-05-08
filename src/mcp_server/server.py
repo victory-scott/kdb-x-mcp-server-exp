@@ -4,6 +4,7 @@ import logging
 import socket
 from packaging import version
 from mcp.server.fastmcp import FastMCP
+from mcp.server.auth.settings import AuthSettings
 from mcp_server.utils.logging import setup_logging
 from mcp_server.settings import AppSettings
 from mcp_server.tools import register_tools
@@ -12,6 +13,51 @@ from mcp_server.resources import register_resources
 
 # Ensure pykx throws error on import if license is not valid
 os.environ["PYKX_LICENSED"] = "true"
+
+
+def _load_spike_token_verifier():
+    """Spike-only: when SPIKE_AUTH=static, return a StaticJWTVerifier + AuthSettings."""
+    mode = os.environ.get("SPIKE_AUTH", "").lower()
+    if not mode:
+        return None, None
+
+    # Make the spike package importable regardless of cwd.
+    spike_dir = os.path.join(os.path.dirname(__file__), "..", "..", "spike")
+    spike_dir = os.path.abspath(spike_dir)
+    if spike_dir not in sys.path:
+        sys.path.insert(0, spike_dir)
+
+    issuer = os.environ.get("SPIKE_ISSUER", "https://localhost:8000/mcp")
+    audience = os.environ.get("SPIKE_AUDIENCE", "https://localhost:8000/mcp")
+    required_scopes = os.environ.get("SPIKE_REQUIRED_SCOPES", "kdbx.read").split()
+
+    auth_settings = AuthSettings(
+        issuer_url=issuer,
+        resource_server_url=audience,
+        required_scopes=required_scopes,
+    )
+
+    if mode == "static":
+        from static_jwt_verifier import StaticJWTVerifier
+        public_key_path = os.environ.get(
+            "SPIKE_PUBLIC_KEY",
+            os.path.join(spike_dir, "keys", "spike_public.pem"),
+        )
+        verifier = StaticJWTVerifier(public_key_path, issuer, audience)
+        return verifier, auth_settings
+
+    if mode == "jwks":
+        from jwks_verifier import JWKSVerifier
+        jwks_uri = os.environ["SPIKE_JWKS_URI"]
+        verifier = JWKSVerifier(
+            jwks_uri=jwks_uri,
+            issuer=issuer,
+            audience=audience if os.environ.get("SPIKE_VERIFY_AUDIENCE", "0") == "1" else None,
+            verify_audience=os.environ.get("SPIKE_VERIFY_AUDIENCE", "0") == "1",
+        )
+        return verifier, auth_settings
+
+    raise ValueError(f"Unknown SPIKE_AUTH mode: {mode!r}")
 
 # Global flag to track AI Libs availability
 _ai_libs_available = False
@@ -34,12 +80,23 @@ class McpServer:
         self.mcp_config = config.mcp
         self.logger.info(f"ServerConfig: {self.mcp_config=}")
 
+        # Spike: optional auth wire-up (Layer A static JWT or Layer B introspection)
+        token_verifier, auth_settings = _load_spike_token_verifier()
+        if token_verifier is not None:
+            self.logger.info(
+                f"SPIKE auth enabled: mode={os.environ.get('SPIKE_AUTH')} "
+                f"issuer={auth_settings.issuer_url} required_scopes={auth_settings.required_scopes}"
+            )
+
         # Initialize server
-        self.mcp = FastMCP(
-            self.mcp_config.server_name,
+        fastmcp_kwargs = dict(
             port=self.mcp_config.port,
-            host=self.mcp_config.host
+            host=self.mcp_config.host,
         )
+        if token_verifier is not None:
+            fastmcp_kwargs["token_verifier"] = token_verifier
+            fastmcp_kwargs["auth"] = auth_settings
+        self.mcp = FastMCP(self.mcp_config.server_name, **fastmcp_kwargs)
 
         self._check_port_availability()
         self._check_kdb_connection()
