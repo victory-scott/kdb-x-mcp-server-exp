@@ -15,6 +15,7 @@ The server leverages a combination of curated resources, intelligent prompts, an
 - [KDB-X Setup](#kdb-x-setup)
 - [MCP Server Installation](#mcp-server-installation)
 - [Security Considerations](#security-considerations)
+- [Authentication](#authentication)
 - [Transport Options](#transport-options)
 - [Command Line Tool](#command-line-tool)
 - [Configure Embeddings](#configure-embeddings)
@@ -243,7 +244,15 @@ If you require an encrypted connection between your MCP Client and your KDB-X MC
 - You can optionally setup an HTTPS proxy in front of your KDB-X MCP server such as [envoy](https://www.envoyproxy.io/) or [nginx](https://nginx.org/) for HTTPS termination
 - When using stdio transport, this is not required as communication is through standard input/output streams on the same host
 
-> Note: FastMCP v2 was evaluated for it's authentication features, but the KDB-X MCP Server will remain temporarily on v1 to preserve broad model compatibility until clients/models catch up, at which point we will transition.
+### Authentication
+
+This fork has adopted a later version of the Anthropic MCP framework (`mcp[cli]>=1.27.0`) and enabled its built-in bearer-token authentication. The server runs in one of three modes selected by the `SPIKE_AUTH` environment variable:
+
+- **unset** (default) — no authentication middleware is installed; behaviour is byte-identical to upstream.
+- **`SPIKE_AUTH=static`** — RS256 JWTs verified against a local public key. Intended for offline development and spike validation.
+- **`SPIKE_AUTH=jwks`** — RS256 JWTs verified against a remote JWKS endpoint exposed by any OIDC issuer (Keycloak, Auth0, Okta, etc.). **This is the production direction.**
+
+See [AUTH_SPIKE.md](AUTH_SPIKE.md) for design, rationale, and sequence diagrams for each mode. See [spike/README.md](spike/README.md) for the reproduction recipe (key generation, q startup, server launch, token minting, benchmarks).
 
 ## Command Line Tool
 
