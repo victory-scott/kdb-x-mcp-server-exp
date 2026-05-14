@@ -226,7 +226,7 @@ sequenceDiagram
   autonumber
   participant C as MCP Client
   participant F as FastMCP
-  participant H as Tool/Resource/Prompt<br/>handler
+  participant H as Handler (tool/resource/prompt)
   participant Q as q backend (kdb-x)
 
   C->>F: POST /mcp (no Authorization required)
@@ -247,21 +247,21 @@ without standing up an IdP.
 ```mermaid
 sequenceDiagram
   autonumber
-  participant Mint as Test-token mint<br/>(spike/mint_token.py)
+  participant Mint as Test-token mint
   participant C as MCP Client
   participant F as FastMCP
-  participant M as RequireAuthMiddleware<br/>(SDK)
+  participant M as RequireAuthMiddleware
   participant V as StaticJWTVerifier
   participant Ctx as auth_context_var
   participant H as Handler
   participant Q as q backend
 
-  Note over Mint,V: Server startup: StaticJWTVerifier reads PEM from disk; FastMCP installs RequireAuthMiddleware.
+  Note over Mint,V: Server startup — StaticJWTVerifier reads PEM from disk; FastMCP installs RequireAuthMiddleware.
   Mint->>C: signs RS256 JWT with local private key
-  C->>F: POST /mcp + Authorization: Bearer <JWT>
+  C->>F: POST /mcp with Bearer JWT
   F->>M: incoming request
   M->>V: verify_token(jwt)
-  V->>V: RS256 verify (local pubkey)<br/>check iss, aud
+  V->>V: RS256 verify (local pubkey), check iss + aud
   alt valid
     V-->>M: AccessToken(client_id, scopes, resource, exp)
     M->>Ctx: set AccessToken
@@ -274,7 +274,7 @@ sequenceDiagram
     F-->>C: 200 OK
   else invalid / missing
     V-->>M: None
-    M-->>C: 401 + WWW-Authenticate: Bearer<br/>resource_metadata=... (RFC 9728)
+    M-->>C: 401 with WWW-Authenticate Bearer + resource_metadata (RFC 9728)
   end
 ```
 
@@ -295,19 +295,19 @@ Okta — only the env vars change.
 sequenceDiagram
   autonumber
   participant C as MCP Client
-  participant I as OIDC IdP<br/>(Keycloak / Navikt / Auth0)
+  participant I as OIDC IdP (Keycloak / Navikt / Auth0)
   participant F as FastMCP
-  participant M as RequireAuthMiddleware<br/>(SDK)
+  participant M as RequireAuthMiddleware
   participant V as JWKSVerifier
-  participant J as PyJWKClient<br/>(in-process cache)
+  participant J as PyJWKClient (in-process cache)
   participant Ctx as auth_context_var
   participant H as Handler
   participant Q as q backend
 
-  Note over C,J: Server startup: JWKSVerifier created; PyJWKClient instantiated but JWKS not yet fetched.
+  Note over C,J: Server startup — JWKSVerifier created; PyJWKClient instantiated but JWKS not yet fetched.
   C->>I: POST /token (client_credentials, scope=kdbx.read)
-  I-->>C: access_token (RS256 JWT, kid=...)
-  C->>F: POST /mcp + Authorization: Bearer <JWT>
+  I-->>C: access_token (RS256 JWT with kid)
+  C->>F: POST /mcp with Bearer JWT
   F->>M: incoming request
   M->>V: verify_token(jwt)
   V->>J: get_signing_key_from_jwt(jwt)
@@ -332,7 +332,7 @@ sequenceDiagram
     F-->>C: 200 OK
   else invalid
     V-->>M: None
-    M-->>C: 401 + WWW-Authenticate: Bearer (RFC 9728)
+    M-->>C: 401 with WWW-Authenticate Bearer (RFC 9728)
   end
 ```
 
