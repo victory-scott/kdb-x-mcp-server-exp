@@ -215,6 +215,17 @@ Three sequence diagrams, one per `SPIKE_AUTH` mode. Each shows the
 full request path: client through middleware through verifier through
 handler through q backend.
 
+**A naming note before reading.** "FastMCP" in the diagrams below
+refers to [`mcp.server.fastmcp.FastMCP`](src/mcp_server/server.py) —
+the high-level server class shipped by the **Anthropic MCP SDK** (the
+`mcp` package, bumped here to `>=1.27.0`). It is *not* the
+third-party FastMCP v2 library (the `fastmcp` package). The old
+README note that this fork removes was about the third-party v2; this
+spike validates that the Anthropic SDK's own bearer-token plumbing —
+`RequireAuthMiddleware`, `TokenVerifier`, `AuthSettings`,
+`get_access_token()` — is sufficient for our needs and that the
+third-party fork is unnecessary.
+
 ### Mode 1: `SPIKE_AUTH` unset (default — upstream behaviour)
 
 `_load_spike_token_verifier()` returns `(None, None)`, no `auth`
@@ -244,6 +255,9 @@ startup. Token validation is pure local crypto — no network calls per
 request, ever. Useful for spike validation and for offline development
 without standing up an IdP.
 
+**Server startup (not shown):** `StaticJWTVerifier` reads the PEM from
+disk; `FastMCP` installs `RequireAuthMiddleware`.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -256,7 +270,6 @@ sequenceDiagram
   participant H as Handler
   participant Q as q backend
 
-  Note over Mint,V: Server startup — StaticJWTVerifier reads PEM from disk; FastMCP installs RequireAuthMiddleware.
   Mint->>C: signs RS256 JWT with local private key
   C->>F: POST /mcp with Bearer JWT
   F->>M: incoming request
@@ -291,6 +304,10 @@ The spike validates against Navikt's mock-oauth2-server running in
 Docker, but the same code runs unchanged against Keycloak / Auth0 /
 Okta — only the env vars change.
 
+**Server startup (not shown):** `JWKSVerifier` is created and a
+`PyJWKClient` is instantiated, but no JWKS is fetched until the first
+request arrives.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -304,7 +321,6 @@ sequenceDiagram
   participant H as Handler
   participant Q as q backend
 
-  Note over C,J: Server startup — JWKSVerifier created; PyJWKClient instantiated but JWKS not yet fetched.
   C->>I: POST /token (client_credentials, scope=kdbx.read)
   I-->>C: access_token (RS256 JWT with kid)
   C->>F: POST /mcp with Bearer JWT
