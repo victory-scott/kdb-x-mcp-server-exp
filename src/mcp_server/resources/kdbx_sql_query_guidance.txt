@@ -2,6 +2,44 @@ KDB SQL Query Guide
 
 Write ANSI-compliant SQL for kdb+ tables.
 
+Before You Write A Query - Read The Schema:
+
+- kdbx_get_table_metadata (tool) - one table's columns, types and example rows. Use this when
+  you already know the table. Cheaper than reading the whole database.
+- kdbx://tables - every table, when you need to find the right one or plan a join.
+- kdbx://functions - functions the database documents, with parameters and worked examples.
+  Often a documented function already does what you were about to hand-write in SQL.
+
+Reading The Metadata:
+
+`mcp.tier` reports how much detail the database can give you:
+  3 - descriptions, semantic types and foreign keys are present. Trust them.
+  2 - names and types only. Descriptions are empty because the q source is unannotated.
+  1 - the database has no aimeta module. Names and types only.
+
+`live.rowSource` tells you what the example rows are, and this matters:
+  "preview"    - real rows read from the table just now. The values in them exist.
+  "sampleData" - illustrative rows written by hand in the annotations. The values are made up.
+                 Never filter on a literal taken from sampleData; it will likely match nothing.
+  "none"       - no example rows, usually an empty table.
+
+Joins - use foreignRef, do not guess:
+A column with "foreignRef": "instrument.sym" joins on equality to that table and column.
+Prefer a stated foreignRef over matching column names by eye - identically named columns do
+not always join, and differently named ones often do.
+
+Resolving A Human-Readable Value To A Key:
+When a column has a "semanticType", the top-level "references" array says where that
+vocabulary is resolved. For "semanticType": "currency" with a reference entry
+{"table": "currency", "keyColumn": "code", "label": "name"}, turn "US Dollar" into a key by
+querying the currency table for name = 'US Dollar' and reading back "code" - then filter the
+original column on that code. Do not guess the code.
+
+Query Planning Hints:
+A column's "attributes" mirror kdb+ attributes and tell you what is cheap:
+  u - unique, O(1) lookup      g - grouped index, fast filtering on equality
+  s - sorted, binary search    p - parted, efficient range scans on disk
+
 IMPORTANT - Column Name Quoting:
 Always use double quotes around column names to avoid conflicts with SQL reserved words.
 Examples: "Close", "Open", "Date", "Time", "Group", "Order", "Key", "Value"

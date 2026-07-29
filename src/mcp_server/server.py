@@ -23,6 +23,17 @@ def set_ai_libs_available(available: bool):
 def is_ai_libs_available() -> bool:
     return _ai_libs_available
 
+# aimeta metadata richness. Unlike the AI Libs flag this is 3-valued, not boolean:
+# 1 = no aimeta, 2 = loaded but source unannotated, 3 = loaded and annotated.
+_aimeta_tier = 1
+
+def set_aimeta_tier(tier: int):
+    global _aimeta_tier
+    _aimeta_tier = tier
+
+def get_aimeta_tier() -> int:
+    return _aimeta_tier
+
 class McpServer:
 
     def __init__(self, config: AppSettings):
@@ -121,6 +132,24 @@ class McpServer:
                 self.logger.info("KDB-X AI Libs check: SUCCESS - AI Libs are loaded, AI tools will be available")
 
             set_ai_libs_available(ai_libs_available)
+
+            # check what tier of aimeta metadata the KDB-X service can serve. Imported here,
+            # not at module scope, because mcp_server.utils.aimeta imports app_settings from
+            # this module.
+            try:
+                from mcp_server.utils.aimeta import detect_tier, tier_guidance
+
+                tier, aimeta_doc = detect_tier(conn)
+                message = tier_guidance(tier, aimeta_doc)
+                if tier == 3:
+                    self.logger.info(message)
+                else:
+                    self.logger.warning(message)
+                set_aimeta_tier(tier)
+            except Exception as e:
+                self.logger.warning(f"KDB-X aimeta check: SKIPPED - probe failed ({e})")
+                set_aimeta_tier(1)
+
             conn.close()
 
         except QError as e:
