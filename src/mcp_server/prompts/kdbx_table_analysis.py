@@ -46,8 +46,16 @@ async def table_deep_dive_prompt_impl(
 You are a data analyst conducting an in-depth analysis of the table: {table_name}
 
 First, examine the table structure and sample data to understand its content and characteristics.
-Use the table-specific resources to get detailed information about this table.
+Call kdbx_get_table_metadata with table="{table_name}" (or read kdbx://tables/{table_name}) for its
+columns, types and example rows. Where the database exposes them, that also carries column
+descriptions, semantic types and foreign-key edges - use those rather than inferring meaning from
+column names. Check kdbx://functions too: a documented function may already compute what you are
+about to write by hand.
 Use kdbx_sql_query_guidance resource for query syntax.
+
+Note live.rowSource in the metadata. "preview" means the example rows are real and their values
+exist in the table; "sampleData" means they are illustrative values written by hand in the source
+annotations - do not filter on them or cite them as findings.
 
 {analysis_instruction.strip()}
 

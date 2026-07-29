@@ -55,6 +55,12 @@ class KDBConfig(BaseSettings):
         default=5,
         description="Default number of results to return from vector searches [env: KDBX_DB_K]"
     )
+    aimeta_cache_ttl: int = Field(
+        default=300,
+        description="""Seconds to cache the aimeta metadata document. Call the
+        kdbx_refresh_metadata tool to pick up recompiled annotations sooner
+        [env: KDBX_DB_AIMETA_CACHE_TTL]"""
+    )
 
 
 

@@ -1,0 +1,197 @@
+{
+    "schemaVersion": 2,
+    "compilerVersion": "0.1.0",
+    "process": {
+        "name": "host"
+    },
+    "tables": [
+        {
+            "name": "instrument",
+            "private": false,
+            "desc": "Reference data - one row per instrument.",
+            "reference": "instrument",
+            "labels": [
+                "name"
+            ],
+            "columns": [
+                {
+                    "name": "sym",
+                    "kdbType": "s",
+                    "desc": "Instrument symbol.",
+                    "attributes": [
+                        "u"
+                    ]
+                },
+                {
+                    "name": "name",
+                    "kdbType": "s",
+                    "desc": "Long name.",
+                    "label": true
+                },
+                {
+                    "name": "sector",
+                    "kdbType": "s",
+                    "desc": "GICS sector classification.",
+                    "cardinality": "low"
+                }
+            ],
+            "tags": [
+                "reference"
+            ],
+            "sampleData": null
+        },
+        {
+            "name": "trade",
+            "private": false,
+            "desc": "Trade tape - all fills and prints, raw.",
+            "reference": "",
+            "labels": [
+                ""
+            ],
+            "columns": [
+                {
+                    "name": "time",
+                    "kdbType": "p",
+                    "desc": "Wall-clock fill time."
+                },
+                {
+                    "name": "sym",
+                    "kdbType": "s",
+                    "desc": "Instrument symbol.",
+                    "semanticType": "instrument",
+                    "foreignRef": "instrument.sym",
+                    "attributes": [
+                        "g"
+                    ]
+                },
+                {
+                    "name": "price",
+                    "kdbType": "f",
+                    "desc": "Fill price in instrument's quote currency.",
+                    "cardinality": "high"
+                },
+                {
+                    "name": "size",
+                    "kdbType": "i",
+                    "desc": "Fill size in shares."
+                }
+            ],
+            "tags": [
+                "core"
+            ],
+            "sampleData": [
+                {
+                    "time": "2026-04-29T14:30:00.000000000",
+                    "sym": "AAPL",
+                    "price": 175.5,
+                    "size": 100
+                },
+                {
+                    "time": "2026-04-29T14:30:01.000000000",
+                    "sym": "MSFT",
+                    "price": 420.1,
+                    "size": 50
+                }
+            ]
+        },
+        {
+            "name": "quote",
+            "private": false,
+            "desc": "Top-of-book quotes.",
+            "reference": "",
+            "labels": [
+                ""
+            ],
+            "columns": [
+                {
+                    "name": "time",
+                    "kdbType": "p",
+                    "desc": "Quote timestamp."
+                },
+                {
+                    "name": "sym",
+                    "kdbType": "s",
+                    "desc": "Instrument symbol.",
+                    "semanticType": "instrument",
+                    "foreignRef": "instrument.sym",
+                    "attributes": [
+                        "g"
+                    ]
+                },
+                {
+                    "name": "bid",
+                    "kdbType": "f",
+                    "desc": "Best bid."
+                },
+                {
+                    "name": "ask",
+                    "kdbType": "f",
+                    "desc": "Best ask."
+                }
+            ],
+            "tags": [
+                "core"
+            ],
+            "sampleData": null
+        }
+    ],
+    "references": [
+        {
+            "semanticType": "instrument",
+            "table": "instrument",
+            "keyColumn": "sym",
+            "label": "name",
+            "labels": [
+                "name"
+            ]
+        }
+    ],
+    "functions": [
+        {
+            "name": ".gw.vwap",
+            "desc": "Volume-weighted average price for given symbols across the trade table.",
+            "params": [
+                {
+                    "name": "syms",
+                    "type": "symbol[]",
+                    "desc": "Symbols to compute VWAP for."
+                }
+            ],
+            "returns": {
+                "type": "table",
+                "desc": "sym-keyed table of volume-weighted price per symbol."
+            },
+            "examples": [
+                ".gw.vwap[`AAPL`MSFT]"
+            ],
+            "uses": [
+                "trade"
+            ],
+            "tags": [
+                "stable"
+            ]
+        },
+        {
+            "name": ".gw.getInstrument",
+            "desc": "Lookup one instrument by symbol.",
+            "params": [
+                {
+                    "name": "s",
+                    "type": "symbol",
+                    "desc": "Instrument symbol."
+                }
+            ],
+            "returns": {
+                "type": "table",
+                "desc": "Single-row instrument record, empty if not found."
+            },
+            "examples": [
+                ".gw.getInstrument[`AAPL]"
+            ],
+            "uses": [
+                "instrument"
+            ],
+            "tags": []
+        }
+    ]
+}

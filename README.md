@@ -387,6 +387,8 @@ The KDB-X MCP Server is compatible with any MCP client that supports the Model C
 | Name                    | URI                              | Purpose                                                                                    | Params |
 | ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------------ | ------ |
 | kdbx_describe_tables    | kdbx://tables                    | Get comprehensive overview of all database tables with schema information and sample data. | None   |
+| kdbx_describe_table     | kdbx://tables/{table}            | Schema for a single table, plus any [aimeta](#richer-metadata-with-aimeta) references its columns point at. Avoids walking every table. | `table`: Name of the table |
+| kdbx_functions          | kdbx://functions                 | Functions the KDB-X process documents, with parameters, return types and worked examples. Requires annotated aimeta source; otherwise returns empty with a hint explaining why. | None   |
 | kdbx_sql_query_guidance | file://guidance/kdbx-sql-queries | Sql query syntax guidance and examples to execute.                                         | None   |
 
 ### Tools
@@ -394,8 +396,56 @@ The KDB-X MCP Server is compatible with any MCP client that supports the Model C
 | Name                   | Purpose                                                                                   | Params                                                                                                                                                          | Return                                         |
 | ---------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | kdbx_run_sql_query     | Execute SQL SELECT against KDB-X database                                                 | `query`: SQL SELECT query string to execute                                                                                                                     | JSON object with query results (max 1000 rows) |
+| kdbx_get_table_metadata | Get the full schema for one table before writing a query against it                      | `table`: Name of the table <br> `preview_rows` (optional): How many real rows to read, 0 to skip                                                                | JSON object with the table schema document     |
+| kdbx_refresh_metadata  | Re-read table and function metadata, picking up annotation changes without a restart      | None                                                                                                                                                            | JSON object with refresh status                |
 | kdbx_similarity_search | Perform vector similarity search on a KDB-X table                                         | `table_name`: Name of the table to search <br> `query`: Text query to convert to vector and search <br> `n` (optional): Number of results to return             | Dictionary containing search result            |
 | kdbx_hybrid_search     | Perform hybrid search combining vector similarity and sparse text search on a KDB-X table | table_name: Name of the table to search <br> query: Text query to convert to dense and sparse vectors for search <br> n (optional): Number of results to return | Dictionary containing search result            |
+
+## Richer metadata with aimeta
+
+Native kdb+ introspection gives column names and type characters and nothing else. A model can
+enumerate your schema from that, but it cannot tell that `trade.sym` joins to `instrument.sym`,
+what a column actually holds, or which functions it is meant to call.
+
+[aimeta](https://github.com/KxSystems/aimeta) is a KDB-X module that compiles qdoc-style
+annotations in your `.q` source into a metadata document served over HTTP and qIPC. This server
+reads it automatically when present. Nothing is required to keep working as before.
+
+The integration is additive - three tiers, reported as `mcp.tier` on every metadata response:
+
+| Tier | Your setup | What the model gets |
+| ---- | ---------- | ------------------- |
+| 1 | No aimeta | Table and column names and types, row counts, real data previews. The pre-existing behaviour. |
+| 2 | `aimeta:use\`kx.aimeta; aimeta.init[]` in your KDB-X session | The above, plus kdb+ column attributes as query-planning hints, a documented list of function names, and `private` flags so internal tables are hidden properly rather than by a name heuristic. |
+| 3 | Plus annotations in your `.q` source | The above, plus column descriptions, semantic types, foreign-key join edges, a `references` index for resolving human-readable values to keys, and full function signatures with parameters, return types and worked examples. |
+
+The server logs which tier it detected at startup, and says what to do to reach the next one.
+After recompiling annotations, call the `kdbx_refresh_metadata` tool to pick them up without
+restarting the server.
+
+### Example rows
+
+Each table reports `live.rowSource`, which says what its example rows are:
+
+- `preview` - real rows read from the table just now. Their values exist in your data.
+- `sampleData` - illustrative rows from your `@sampleRow` annotations. The values are made up.
+- `none` - no example rows, usually an empty table.
+
+Real rows win when both are available, so a table never carries both and the model is never
+tempted to filter on a fabricated symbol. Annotated sample rows are the fallback for empty
+tables and for previews that fail or would be too expensive.
+
+### Settings
+
+| Env var | Default | Purpose |
+| ------- | ------- | ------- |
+| `KDBX_DB_AIMETA_CACHE_TTL` | `300` | Seconds to cache the metadata document. Call `kdbx_refresh_metadata` to pick up recompiled annotations sooner. |
+
+Metadata is read over the qIPC connection this server already holds, via `.aimeta.data[]`.
+aimeta also serves the same document over HTTP on the same port, but the two are identical
+once normalized, so there is no second transport to configure or to fail.
+
+> **Note:** `kdbx://tables` returns JSON. Earlier versions rendered an ASCII table.
 
 ## Development
 
@@ -421,6 +471,33 @@ To add new prompts:
 4. Restart your MCP Client Desktop to access your new prompt.
 
 ## Testing
+
+Run the unit tests. These use recorded metadata fixtures and a fake connection, so no KDB-X
+process is needed:
+
+```bash
+uv run pytest tests -q --ignore=tests/test_live_integration.py
+```
+
+`tests/test_live_integration.py` exercises the real HTTP and qIPC transports against a running
+process, and skips entirely when nothing is listening. The
+[aimeta](https://github.com/KxSystems/aimeta) demos give ready-made hosts at each tier - from a
+checkout of that repo:
+
+```bash
+cd demos/authoring && q host-annotated.q
+```
+
+Then point the tests at it:
+
+```bash
+KDBX_DB_PORT=5013 uv run pytest tests/test_live_integration.py -v
+```
+
+For tier 2, copy `demos/authoring/host.q` to an empty directory first and run it there - running
+it in place picks up the annotations from `host-annotated.q` sitting alongside it. For tier 1,
+any plain `q -p 5013` works. Note the demo tables are empty, so the data-preview path only runs
+if you insert some rows.
 
 The below tools can aid in the development, testing and debugging of new MCP tools, resource and prompts.
 

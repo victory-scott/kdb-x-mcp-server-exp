@@ -1,115 +1,71 @@
+import json
 import logging
 from typing import List
+
 from mcp.types import TextContent
-from mcp_server.utils.kdbx import get_kdb_connection
-from mcp_server.utils.format_utils import format_data_for_display
-from mcp_server.utils.embeddings_helpers import get_embedding_config
+
+from mcp_server.utils.schema_model import (
+    DEFAULT_PREVIEW_ROWS,
+    build_database_document,
+    build_table_document,
+)
 
 logger = logging.getLogger(__name__)
 
 
-async def kdbx_describe_table_impl(table: str) -> List[TextContent]:
-    """
-    Describe a specific KDB table with metadata and sample rows.
-
-    Args:
-        table: Name of the KDB table to describe
-
-    Returns:
-        List[TextContent]: Table description with metadata and sample data
-    """
-    try:
-        conn = get_kdb_connection()
-
-        total_records = conn('{count get x}', table).py()
-
-        schema_data = conn.meta(table).py()
-        partitioned_table = table in conn.Q.pt.py()
-
-        output_lines = [
-            f"\n  TABLE ANALYSIS: {table}",
-            f"{'=' * 60}",
-        ]
-
-        output_lines.extend([
-            f"\n Schema Information:",
-            format_data_for_display(schema_data, table)
-        ])
-
-        if total_records > 0:
-            preview_size = min(3, total_records)
-            if not partitioned_table:
-                preview_data = conn('{x sublist get y}', preview_size, table).py()
-            else:
-                preview_data = conn('{.Q.ind[get y;til x]}', preview_size, table).py()
-
-            output_lines.extend([
-                f"\n Data Preview ({preview_size} records):",
-                format_data_for_display(preview_data, table)
-            ])
-        else:
-            output_lines.append("\n Table is empty - no data to preview")
-
-        final_output = "\n".join(output_lines)
-
-        return [TextContent(type="text", text=final_output)]
-
-    except Exception as error:
-        logger.error(f"Failed to analyze table '{table}': {error}")
-        error_output = f"\n TABLE ANALYSIS FAILED: {table}\n{'=' *60}\nError: {error}"
-        return [TextContent(type="text", text=error_output)]
+def _as_json(document: dict) -> List[TextContent]:
+    return [TextContent(type="text", text=json.dumps(document, indent=2, default=str))]
 
 
 async def kdbx_describe_tables_impl() -> List[TextContent]:
+    """Whole-database schema as the unified aimeta-shaped document."""
     try:
-        conn = get_kdb_connection()
-
-        available_tables = conn.tables(None).py()
-        
-        # Filter out internal AI library index tables (*document, *stats, *token)
-        available_tables = [
-            table for table in available_tables 
-            if not (table.endswith('document') or table.endswith('stats') or table.endswith('token'))
-        ]
-
-        if not available_tables:
-            return [TextContent(
-                type="text",
-                text=" Database is empty - no tables found"
-            )]
-
-        overview_parts = [
-            "  DATABASE SCHEMA OVERVIEW",
-            "═" * 60,
-            f" Found {len(available_tables)} table(s)\n"
-        ]
-
-        for table_name in available_tables:
-            table_analysis = await kdbx_describe_table_impl(table_name)
-            overview_parts.append(table_analysis[0].text)
-
-        complete_overview = "\n".join(overview_parts)
-        logger.debug(complete_overview)
-        return [TextContent(type="text", text=complete_overview)]
-
+        return _as_json(build_database_document())
     except Exception as error:
         logger.error(f"Database schema analysis failed: {error}")
-        return [TextContent(
-            type="text",
-            text=f" DATABASE ANALYSIS ERROR\n{'═' * 60}\nFailed to analyze database schema: {error}"
-        )]
+        return _as_json({"error": f"Failed to analyze database schema: {error}"})
 
+
+async def kdbx_describe_table_impl(
+    table: str, preview_rows: int = DEFAULT_PREVIEW_ROWS
+) -> List[TextContent]:
+    """Single-table schema, without walking the whole database."""
+    try:
+        return _as_json(build_table_document(table, preview_rows=preview_rows))
+    except Exception as error:
+        logger.error(f"Failed to analyze table '{table}': {error}")
+        return _as_json({"error": f"Failed to analyze table '{table}': {error}"})
 
 
 def register_resources(mcp_server):
     @mcp_server.resource("kdbx://tables")
     async def kdbx_describe_tables() -> List[TextContent]:
         """
-        Generate comprehensive KDB database schema overview with all KDB table details.
+        Complete KDB-X database schema: every table with its columns, types and a data preview.
+
+        When the KDB-X process has the aimeta module loaded this also carries column
+        descriptions, semantic types, foreign-key edges and a `references` index for resolving
+        human-readable values to keys. `mcp.tier` reports how much of that is available.
 
         Returns:
-            List[TextContent]: Complete database analysis with all tables
+            List[TextContent]: The database schema document.
         """
         return await kdbx_describe_tables_impl()
 
-    return ['kdbx://tables']
+    @mcp_server.resource("kdbx://tables/{table}")
+    async def kdbx_describe_table(table: str) -> List[TextContent]:
+        """
+        Schema for a single KDB-X table, plus any aimeta references its columns point at.
+
+        Prefer this over kdbx://tables when you already know which table you need - it avoids
+        walking every table in the database.
+
+        Args:
+            table: Name of the KDB-X table to describe.
+
+        Returns:
+            List[TextContent]: The table schema document.
+        """
+        return await kdbx_describe_table_impl(table)
+
+    return ['kdbx://tables', 'kdbx://tables/{table}']

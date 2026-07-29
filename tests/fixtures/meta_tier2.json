@@ -1,0 +1,125 @@
+{
+    "schemaVersion": 2,
+    "compilerVersion": "0.1.0",
+    "process": {
+        "name": "host",
+        "compileStatus": "empty",
+        "warnings": [
+            "compile succeeded but emitted no public tables or functions"
+        ]
+    },
+    "tables": [
+        {
+            "name": "instrument",
+            "private": false,
+            "desc": "",
+            "columns": [
+                {
+                    "name": "sym",
+                    "kdbType": "s",
+                    "foreignRef": "",
+                    "attributes": [
+                        "u"
+                    ]
+                },
+                {
+                    "name": "name",
+                    "kdbType": "s",
+                    "foreignRef": ""
+                },
+                {
+                    "name": "sector",
+                    "kdbType": "s",
+                    "foreignRef": ""
+                }
+            ]
+        },
+        {
+            "name": "quote",
+            "private": false,
+            "desc": "",
+            "columns": [
+                {
+                    "name": "time",
+                    "kdbType": "p",
+                    "foreignRef": ""
+                },
+                {
+                    "name": "sym",
+                    "kdbType": "s",
+                    "foreignRef": "",
+                    "attributes": [
+                        "g"
+                    ]
+                },
+                {
+                    "name": "bid",
+                    "kdbType": "f",
+                    "foreignRef": ""
+                },
+                {
+                    "name": "ask",
+                    "kdbType": "f",
+                    "foreignRef": ""
+                }
+            ]
+        },
+        {
+            "name": "trade",
+            "private": false,
+            "desc": "",
+            "columns": [
+                {
+                    "name": "time",
+                    "kdbType": "p",
+                    "foreignRef": ""
+                },
+                {
+                    "name": "sym",
+                    "kdbType": "s",
+                    "foreignRef": "",
+                    "attributes": [
+                        "g"
+                    ]
+                },
+                {
+                    "name": "price",
+                    "kdbType": "f",
+                    "foreignRef": ""
+                },
+                {
+                    "name": "size",
+                    "kdbType": "i",
+                    "foreignRef": ""
+                }
+            ]
+        }
+    ],
+    "references": [],
+    "functions": [
+        {
+            "name": ".gw.getInstrument",
+            "desc": "",
+            "params": [],
+            "returns": {
+                "type": "",
+                "desc": ""
+            },
+            "examples": [],
+            "uses": [],
+            "tags": []
+        },
+        {
+            "name": ".gw.vwap",
+            "desc": "",
+            "params": [],
+            "returns": {
+                "type": "",
+                "desc": ""
+            },
+            "examples": [],
+            "uses": [],
+            "tags": []
+        }
+    ]
+}
